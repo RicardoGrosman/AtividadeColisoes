@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+   <meta charset="utf-8">
+   <title>Detecção de colisões - Avançado</title>
+   <script>
+
+      function Bola(context) {
+         this.context = context;
+         this.x = 0;
+         this.y = 0;
+         this.velocidadeX = 0;
+         this.velocidadeY = 0;
+         this.cor = 'black';
+         this.raio = 10;
+         this.visivel = true;
+      }
+      Bola.prototype = {
+         atualizar: function () {
+            if (!this.visivel) return;
+            var ctx = this.context;
+
+            if (this.x < this.raio || this.x > ctx.canvas.width - this.raio)
+               this.velocidadeX *= -1;
+
+            if (this.y < this.raio || this.y > ctx.canvas.height - this.raio)
+               this.velocidadeY *= -1;
+
+            this.x += this.velocidadeX;
+            this.y += this.velocidadeY;
+         },
+         desenhar: function () {
+            if (!this.visivel) return;
+            var ctx = this.context;
+            ctx.save();
+            ctx.fillStyle = this.cor;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.raio, 0, 2 * Math.PI, false);
+            ctx.fill();
+            ctx.restore();
+         },
+         retangulosColisao: function () {
+            return [
+               {
+                  x: this.x - this.raio,
+                  y: this.y - this.raio,
+                  largura: this.raio * 2,
+                  altura: this.raio * 2
+               }
+            ];
+         },
+         colidiuCom: function (sprite) {
+            if (!this.visivel) return;
+            if (this.x < sprite.x)
+               this.velocidadeX = -Math.abs(this.velocidadeX);
+            else
+               this.velocidadeX = Math.abs(this.velocidadeX);
+
+            if (this.y < sprite.y)
+               this.velocidadeY = -Math.abs(this.velocidadeY);
+            else
+               this.velocidadeY = Math.abs(this.velocidadeY);
+
+            const cores = ["purple","blue", "red", "yellow", "green", "orange","magenta","cyan","gray","pink"];
+            this.cor = cores[Math.floor(Math.random() * cores.length)];
+         }
+      };
+
+      function Retangulo(context, x, y, largura, altura, cor) {
+         this.context = context;
+         this.x = x;
+         this.y = y;
+         this.largura = largura;
+         this.altura = altura;
+         this.cor = cor;
+         this.visivel = true;
+      }
+      Retangulo.prototype = {
+         desenhar: function () {
+            if (!this.visivel) return;
+            var ctx = this.context;
+            ctx.save();
+            ctx.fillStyle = this.cor;
+            ctx.fillRect(this.x, this.y, this.largura, this.altura);
+            ctx.restore();
+         },
+         retangulosColisao: function () {
+
+            return [
+               { x: this.x, y: this.y, largura: this.largura / 2, altura: this.altura },
+               { x: this.x + this.largura / 2, y: this.y, largura: this.largura / 2, altura: this.altura } 
+            ];
+         },
+         colidiuCom: function (sprite, retColidido) {
+         
+            this.visivel = false;
+            console.log("Retângulo atingido na área:", retColidido);
+         }
+      };
+
+
+      function Colisor() {
+         this.sprites = [];
+         this.aoColidir = null;
+         this.contadorColisoes = {}; 
+      }
+      Colisor.prototype = {
+         novoSprite: function (sprite) {
+            this.sprites.push(sprite);
+         },
+         processar: function () {
+            var jaTestados = {};
+
+            for (var i in this.sprites) {
+               for (var j in this.sprites) {
+                  if (i == j) continue;
+
+                  var s1 = this.sprites[i];
+                  var s2 = this.sprites[j];
+                  if (!s1.visivel || !s2.visivel) continue;
+
+                  var id1 = this.stringUnica(s1);
+                  var id2 = this.stringUnica(s2);
+
+                  if (!jaTestados[id1]) jaTestados[id1] = [];
+                  if (!jaTestados[id2]) jaTestados[id2] = [];
+
+                  if (!(jaTestados[id1].includes(id2) || jaTestados[id2].includes(id1))) {
+                     var retColidido = this.testarColisao(s1, s2);
+                     if (retColidido) {
+                        if (s1 instanceof Bola && s2 instanceof Bola) {
+                           let chave = [s1, s2].sort().toString();
+                           if (!this.contadorColisoes[chave]) this.contadorColisoes[chave] = 0;
+
+                           this.contadorColisoes[chave]++;
+                           console.log("Colisão entre bolas:", chave, " -> ", this.contadorColisoes[chave]);
+
+                           if (this.contadorColisoes[chave] === 3) {
+                              alert("👉 Game Over");
+                              return;
+                           }
+                        }
+
+                        s1.colidiuCom(s2, retColidido);
+                        s2.colidiuCom(s1, retColidido);
+
+                        if (this.aoColidir) this.aoColidir(s1, s2, retColidido);
+                     }
+                     jaTestados[id1].push(id2);
+                     jaTestados[id2].push(id1);
+                  }
+               }
+            }
+         },
+         testarColisao: function (sprite1, sprite2) {
+            var rets1 = sprite1.retangulosColisao();
+            var rets2 = sprite2.retangulosColisao();
+
+            for (var i in rets1) {
+               for (var j in rets2) {
+                  if (this.retangulosColidem(rets1[i], rets2[j])) {
+                     return rets2[j];
+                  }
+               }
+            }
+            return null;
+         },
+         retangulosColidem: function (ret1, ret2) {
+            return (ret1.x + ret1.largura) > ret2.x &&
+               ret1.x < (ret2.x + ret2.largura) &&
+               (ret1.y + ret1.altura) > ret2.y &&
+               ret1.y < (ret2.y + ret2.altura);
+         },
+         stringUnica: function (sprite) {
+            return sprite.constructor.name + "_" + Math.floor(sprite.x) + "_" + Math.floor(sprite.y);
+         }
+      };
+
+      window.onload = function () {
+         var canvas = document.getElementById('canvas_colisao');
+         var context = canvas.getContext('2d');
+
+         var b1 = new Bola(context);
+         b1.x = 200; b1.y = 200;
+         b1.velocidadeX = 5; b1.velocidadeY = -3;
+         b1.cor = 'blue'; b1.raio = 20;
+
+         var b2 = new Bola(context);
+         b2.x = 300; b2.y = 300;
+         b2.velocidadeX = -4; b2.velocidadeY = 3;
+         b2.cor = 'red'; b2.raio = 25;
+
+
+         var retangulo1 = new Retangulo(context, 400, 100, 80, 40, 'purple');
+         var retangulo2 = new Retangulo(context, 100, 400, 100, 50, 'green');
+         
+         var colisor = new Colisor();
+         colisor.novoSprite(b1);
+         colisor.novoSprite(b2);
+         colisor.novoSprite(retangulo1);
+         colisor.novoSprite(retangulo2);
+
+         function animar() {
+            context.clearRect(0, 0, canvas.width, canvas.height);
+
+            b1.atualizar();
+            b2.atualizar();
+
+            b1.desenhar();
+            b2.desenhar();
+            retangulo1.desenhar();
+            retangulo2.desenhar();
+
+            colisor.processar();
+
+            requestAnimationFrame(animar);
+         }
+         animar();
+      };
+   </script>
+</head>
+
+<body>
+   <canvas id="canvas_colisao" width="600" height="500"></canvas>
+</body>
+
+</html>
